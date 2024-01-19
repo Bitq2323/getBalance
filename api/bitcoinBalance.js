@@ -1,5 +1,5 @@
 const ElectrumClient = require('electrum-client');
-const getScriptHash = require('./getScript'); // Make sure this path correctly points to your getScript.js file
+const getScriptHash = require('./getScript'); // Ensure this path is correct
 const bitcoin = require('bitcoinjs-lib');
 
 function isValidAddress(address) {
@@ -14,10 +14,6 @@ function isValidAddress(address) {
 async function getAddressDetails(address, electrumClient) {
     try {
         const scriptHash = getScriptHash(address);
-        if (!scriptHash) {
-            throw new Error(`Failed to get script hash for address ${address}`);
-        }
-
         const utxos = await electrumClient.blockchainScripthash_listunspent(scriptHash);
         const balance = utxos.reduce((total, utxo) => total + utxo.value, 0);
         const balanceBTC = balance / 1e8;
@@ -33,14 +29,12 @@ async function getAddressDetails(address, electrumClient) {
             }
         });
 
-        const totalTransactions = history.length;
-
         return {
             address,
             balanceBTC,
             confirmedTransactions,
             unconfirmedTransactions,
-            totalTransactions
+            totalTransactions: history.length
         };
     } catch (e) {
         console.error(`Error getting details for address ${address}: ${e.message}`);
@@ -51,10 +45,6 @@ async function getAddressDetails(address, electrumClient) {
 async function getBalanceForAddress(address, electrumClient) {
     try {
         const scriptHash = getScriptHash(address);
-        if (!scriptHash) {
-            throw new Error(`Failed to get script hash for address ${address}`);
-        }
-
         const utxos = await electrumClient.blockchainScripthash_listunspent(scriptHash);
         const balance = utxos.reduce((total, utxo) => total + utxo.value, 0);
         return balance / 1e8; // Convert to BTC
@@ -83,20 +73,19 @@ module.exports = async (req, res) => {
         let addressesToCheck = inputAddresses.split(',').map(address => address.trim());
         addressesToCheck = [...new Set(addressesToCheck)].filter(address => address !== '');
 
-    // List of fallback Electrum servers
-    const fallbackServers = [
-        'bolt.schulzemic.net:50002',
-        'de.poiuty.com:50002',
-        'electrum.kcicom.net:50002',
-        'api.ordimint.com:50002',
-        'electrum.blockstream.info:50002',
-        'bitcoin.aranguren.org:50002',
-        'electrum.jochen-hoenicke.de:50006',
-        'vmd104012.contaboserver.net:50002',
-        'bitcoin.grey.pw:50002',
-        'btc.aftrek.org:50002'
-    ];
-    
+        const fallbackServers = [
+            'bolt.schulzemic.net:50002',
+            'de.poiuty.com:50002',
+            'electrum.kcicom.net:50002',
+            'api.ordimint.com:50002',
+            'electrum.blockstream.info:50002',
+            'bitcoin.aranguren.org:50002',
+            'electrum.jochen-hoenicke.de:50006',
+            'vmd104012.contaboserver.net:50002',
+            'bitcoin.grey.pw:50002',
+            'btc.aftrek.org:50002'
+        ];
+
         let serversToTry = [specifiedServer, ...fallbackServers];
         let client = null;
 
@@ -138,8 +127,8 @@ module.exports = async (req, res) => {
     } catch (error) {
         console.error('Error:', error);
         res.status(500).send({ error: 'Internal Server Error', details: error.message });
-        return; // Add return to prevent further execution after error
     } finally {
+        // Safely close client if it's initialized
         if (client) client.close();
     }
 };
