@@ -138,6 +138,7 @@ module.exports = async (req, res) => {
     } catch (error) {
         console.error('Error:', error);
         res.status(500).send({ error: 'Internal Server Error', details: error.message });
+        return; // Add return to prevent further execution after error
     } finally {
         if (client) client.close();
     }
