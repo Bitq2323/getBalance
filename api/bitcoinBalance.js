@@ -1,5 +1,4 @@
 const ElectrumClient = require('electrum-client');
-const getScriptHash = require('./getScript'); // Ensure this path is correct
 const bitcoin = require('bitcoinjs-lib');
 
 function isValidAddress(address) {
@@ -10,6 +9,49 @@ function isValidAddress(address) {
         return false;
     }
 }
+
+function getScriptHash(address) {
+    let output;
+
+    try {
+        if (address.startsWith('1')) {
+            const { hash } = bitcoinjs.address.fromBase58Check(address);
+            // Construct the output script manually for P2PKH addresses
+            output = bitcoinjs.script.compile([
+                bitcoinjs.opcodes.OP_DUP,
+                bitcoinjs.opcodes.OP_HASH160,
+                hash,
+                bitcoinjs.opcodes.OP_EQUALVERIFY,
+                bitcoinjs.opcodes.OP_CHECKSIG
+            ]);
+        } else if (address.startsWith('3')) {
+            const payment = bitcoinjs.payments.p2sh({
+                address: address,
+                network: bitcoinjs.networks.bitcoin,
+            });
+            output = payment.output;
+        } else if (address.startsWith('bc1')) {
+            const bech32Decoded = bitcoinjs.address.fromBech32(address);
+            if (bech32Decoded.data.length === 20) {
+                output = bitcoinjs.payments.p2wpkh({ hash: bech32Decoded.data }).output;
+            } else if (bech32Decoded.data.length === 32) {
+                output = bitcoinjs.payments.p2wsh({ hash: bech32Decoded.data }).output;
+            }
+        }
+    } catch (err) {
+        console.log(`Failed to get script hash for address ${address}: ${err.message}`);
+        return null;
+    }
+
+    if (!output) {
+        console.log(`Unsupported address type: ${address}`);
+        return null;
+    }
+
+    const scriptHash = bitcoinjs.crypto.sha256(output);
+    return Buffer.from(scriptHash).reverse().toString('hex');
+}
+
 
 async function getAddressDetails(address, electrumClient) {
     try {
@@ -55,8 +97,10 @@ async function getBalanceForAddress(address, electrumClient) {
 }
 
 module.exports = async (req, res) => {
+    let client = null;
+
     try {
-        if(req.method !== 'POST') {
+        if (req.method !== 'POST') {
             res.status(405).send({ error: 'Method Not Allowed' });
             return;
         }
@@ -64,7 +108,6 @@ module.exports = async (req, res) => {
         let inputAddresses = req.body.addresses || "";
         let isMulti = req.body.multi || false;
         let specifiedServer = req.body.server;
-
         if (!specifiedServer) {
             res.status(400).send('Electrum server is required.');
             return;
@@ -73,56 +116,48 @@ module.exports = async (req, res) => {
         let addressesToCheck = inputAddresses.split(',').map(address => address.trim());
         addressesToCheck = [...new Set(addressesToCheck)].filter(address => address !== '');
 
-        const fallbackServers = [
-            'bolt.schulzemic.net:50002',
-            'de.poiuty.com:50002',
-            'electrum.kcicom.net:50002',
-            'api.ordimint.com:50002',
-            'electrum.blockstream.info:50002',
-            'bitcoin.aranguren.org:50002',
-            'electrum.jochen-hoenicke.de:50006',
-            'vmd104012.contaboserver.net:50002',
-            'bitcoin.grey.pw:50002',
-            'btc.aftrek.org:50002'
-        ];
+    // List of fallback Electrum servers
+    const fallbackServers = [
+        'bolt.schulzemic.net:50002',
+        'de.poiuty.com:50002',
+        'electrum.kcicom.net:50002',
+        'api.ordimint.com:50002',
+        'electrum.blockstream.info:50002',
+        'bitcoin.aranguren.org:50002',
+        'electrum.jochen-hoenicke.de:50006',
+        'vmd104012.contaboserver.net:50002',
+        'bitcoin.grey.pw:50002',
+        'btc.aftrek.org:50002'
+    ];
+    
 
         let serversToTry = [specifiedServer, ...fallbackServers];
-        let client = null;
+        let balanceDetails = null;
 
-        for (const address of addressesToCheck) {
-            if (!isValidAddress(address)) {
-                throw new Error(`Invalid address: ${address}`);
-            }
-        }
-
-        let balanceDetails;
         for (const server of serversToTry) {
             try {
                 const [hostname, port] = server.split(':');
                 client = new ElectrumClient(port, hostname, 'tls');
                 await client.connect();
-                
+
                 if (!isMulti && addressesToCheck.length === 1) {
                     balanceDetails = await getAddressDetails(addressesToCheck[0], client);
                 } else {
-                    const balances = await Promise.all(
-                        addressesToCheck.map(address => getBalanceForAddress(address, client))
-                    );
-                    const totalBalance = balances.reduce((acc, balance) => acc + balance, 0);
-                    balanceDetails = { totalBalance: totalBalance.toFixed(8) };
+                    balanceDetails = {
+                        totalBalance: (await Promise.all(addressesToCheck.map(address => 
+                            getBalanceForAddress(address, client))
+                        )).reduce((acc, balance) => acc + balance, 0).toFixed(8)
+                    };
                 }
-                client.close();
-                break;
+                break; // Successful execution, break the loop
             } catch (serverError) {
                 console.warn(`Server ${server} failed: ${serverError.message}`);
-                // Continue to next server
             } finally {
                 if (client) {
                     client.close(); // Safely close the client
                 }
             }
         }
-        
 
         if (balanceDetails) {
             res.status(200).send(JSON.stringify(balanceDetails, null, 3));
@@ -132,8 +167,7 @@ module.exports = async (req, res) => {
     } catch (error) {
         console.error('Error:', error);
         res.status(500).send({ error: 'Internal Server Error', details: error.message });
-    } finally {
-        // Safely close client if it's initialized
-        if (client) client.close();
+    
     }
+
 };
