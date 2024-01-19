@@ -101,7 +101,7 @@ module.exports = async (req, res) => {
                 const [hostname, port] = server.split(':');
                 client = new ElectrumClient(port, hostname, 'tls');
                 await client.connect();
-
+                
                 if (!isMulti && addressesToCheck.length === 1) {
                     balanceDetails = await getAddressDetails(addressesToCheck[0], client);
                 } else {
@@ -115,9 +115,14 @@ module.exports = async (req, res) => {
                 break;
             } catch (serverError) {
                 console.warn(`Server ${server} failed: ${serverError.message}`);
-                if (client) client.close();
+                // Continue to next server
+            } finally {
+                if (client) {
+                    client.close(); // Safely close the client
+                }
             }
         }
+        
 
         if (balanceDetails) {
             res.status(200).send(JSON.stringify(balanceDetails, null, 3));
