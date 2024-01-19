@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "bitcoinjs-lib": "^5.2.0",
+    "electrum-client": "^0.0.6"
+  }
+}
