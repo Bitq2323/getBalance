@@ -162,6 +162,7 @@ module.exports = async (req, res) => {
                     let response = {
                         addressesDetails,
                         totalBalance: totalBalance / 1e8,
+                        totalTransacationsMulti: totalConfirmedTransactions + totalUnconfirmedTransactions,
                         totalConfirmedTransactions,
                         totalUnconfirmedTransactions,
                         totalAddressesFetched: addressesDetails.length
