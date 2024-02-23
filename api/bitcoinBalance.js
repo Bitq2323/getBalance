@@ -113,17 +113,23 @@ module.exports = async (req, res) => {
         }
 
         let addressesToCheck = inputAddresses.split(',').map(address => address.trim());
-        addressesToCheck = [...new Set(addressesToCheck)].filter(address => isValidAddress(address));
+        addressesToCheck = [...new Set(addressesToCheck)].filter(isValidAddress);
 
-        const fallbackServers = [
-            // List of fallback Electrum servers
-        ];
+    // List of fallback Electrum servers
+    const fallbackServers = [
+        'bolt.schulzemic.net:50002',
+        'de.poiuty.com:50002',
+        'electrum.kcicom.net:50002',
+        'api.ordimint.com:50002',
+        'electrum.blockstream.info:50002',
+        'bitcoin.aranguren.org:50002',
+        'electrum.jochen-hoenicke.de:50006',
+        'vmd104012.contaboserver.net:50002',
+        'bitcoin.grey.pw:50002',
+        'btc.aftrek.org:50002'
+    ];
     
         let serversToTry = [specifiedServer, ...fallbackServers];
-        let addressesDetails = []; // To store details of each address
-        let totalBalance = 0;
-        let totalConfirmedTransactions = 0;
-        let totalUnconfirmedTransactions = 0;
 
         for (const server of serversToTry) {
             try {
@@ -131,17 +137,38 @@ module.exports = async (req, res) => {
                 client = new ElectrumClient(port, hostname, 'tls');
                 await client.connect();
 
-                let promises = addressesToCheck.map(address => getAddressDetails(address, client));
-                let results = await Promise.all(promises);
+                if (!isMulti) {
+                    // Handling single address (original functionality)
+                    const details = await getAddressDetails(addressesToCheck[0], client);
+                    res.status(200).send(JSON.stringify(details, null, 3));
+                    return; // Exit after handling single address
+                } else {
+                    // Handling multiple addresses (new functionality)
+                    let addressesDetails = [];
+                    let totalBalance = 0;
+                    let totalConfirmedTransactions = 0;
+                    let totalUnconfirmedTransactions = 0;
 
-                results.forEach(result => {
-                    addressesDetails.push(result);
-                    totalBalance += result.balanceBTC;
-                    totalConfirmedTransactions += result.confirmedTransactions;
-                    totalUnconfirmedTransactions += result.unconfirmedTransactions;
-                });
+                    let promises = addressesToCheck.map(address => getAddressDetails(address, client));
+                    let results = await Promise.all(promises);
 
-                break; // Successful execution, break the loop
+                    results.forEach(result => {
+                        addressesDetails.push(result);
+                        totalBalance += result.balanceBTC;
+                        totalConfirmedTransactions += result.confirmedTransactions;
+                        totalUnconfirmedTransactions += result.unconfirmedTransactions;
+                    });
+
+                    let response = {
+                        addressesDetails,
+                        totalBalance: totalBalance.toFixed(8),
+                        totalConfirmedTransactions,
+                        totalUnconfirmedTransactions,
+                        totalAddressesFetched: addressesDetails.length
+                    };
+                    res.status(200).send(JSON.stringify(response, null, 3));
+                    return; // Exit after handling multiple addresses
+                }
             } catch (serverError) {
                 console.warn(`Server ${server} failed: ${serverError.message}`);
             } finally {
@@ -151,18 +178,7 @@ module.exports = async (req, res) => {
             }
         }
 
-        if (addressesDetails.length > 0) {
-            let response = {
-                addressesDetails,
-                totalBalance: totalBalance.toFixed(8),
-                totalConfirmedTransactions,
-                totalUnconfirmedTransactions,
-                totalAddressesFetched: addressesDetails.length
-            };
-            res.status(200).send(JSON.stringify(response, null, 3));
-        } else {
-            throw new Error("All servers failed to respond or no valid addresses provided.");
-        }
+        throw new Error("All servers failed to respond.");
     } catch (error) {
         console.error('Error:', error);
         res.status(500).send({ error: 'Internal Server Error', details: error.message });
