@@ -95,7 +95,7 @@ async function getBalanceForAddress(address, electrumClient) {
     }
 }
 
-// Your existing imports and function definitions remain unchanged
+// Assuming previous functions (isValidAddress, getScriptHash, getAddressDetails) remain unchanged
 
 module.exports = async (req, res) => {
     let client = null;
@@ -106,9 +106,9 @@ module.exports = async (req, res) => {
             return;
         }
 
-        let inputAddresses = req.body.addresses || "";
-        let isMulti = req.body.multi || false;
-        let specifiedServer = req.body.server;
+        const inputAddresses = req.body.addresses || "";
+        const isMulti = req.body.multi || false;
+        const specifiedServer = req.body.server;
         if (!specifiedServer) {
             res.status(400).send('Electrum server is required.');
             return;
@@ -116,7 +116,6 @@ module.exports = async (req, res) => {
 
         let addressesToCheck = inputAddresses.split(',').map(address => address.trim());
         addressesToCheck = [...new Set(addressesToCheck)].filter(isValidAddress);
-
     // List of fallback Electrum servers
     const fallbackServers = [
         'bolt.schulzemic.net:50002',
@@ -131,6 +130,7 @@ module.exports = async (req, res) => {
         'btc.aftrek.org:50002'
     ];
 
+    
         let serversToTry = [specifiedServer, ...fallbackServers];
 
         for (const server of serversToTry) {
@@ -140,12 +140,14 @@ module.exports = async (req, res) => {
                 await client.connect();
 
                 if (!isMulti) {
-                    // Original single address functionality remains unchanged
                     const details = await getAddressDetails(addressesToCheck[0], client);
-                    res.status(200).send(JSON.stringify(details, null, 3));
+                    // Ensure balanceBTC is a double
+                    details.balanceBTC = parseFloat(details.balanceBTC.toFixed(8));
+                    res.status(200).send(details);
                     return;
                 } else {
                     // Handling multiple addresses
+                    let addressesDetails = [];
                     let totalBalance = 0;
                     let totalTransactions = 0;
                     let totalConfirmedTransactions = 0;
@@ -155,6 +157,9 @@ module.exports = async (req, res) => {
                     let results = await Promise.all(promises);
 
                     results.forEach(result => {
+                        // Ensure balanceBTC is a double for each result
+                        result.balanceBTC = parseFloat(result.balanceBTC.toFixed(8));
+                        addressesDetails.push(result);
                         totalBalance += result.balanceBTC;
                         totalTransactions += result.totalTransactions;
                         totalConfirmedTransactions += result.confirmedTransactions;
@@ -162,13 +167,14 @@ module.exports = async (req, res) => {
                     });
 
                     let response = {
-                        totalBalance: totalBalance.toFixed(8),
+                        addressesDetails,
+                        totalBalance: parseFloat(totalBalance.toFixed(8)), // Ensure totalBalance is a double
                         totalTransactions,
                         totalConfirmedTransactions,
                         totalUnconfirmedTransactions,
-                        totalAddressesFetched: results.length
+                        totalAddressesFetched: addressesDetails.length
                     };
-                    res.status(200).send(JSON.stringify(response, null, 3));
+                    res.status(200).send(response);
                     return;
                 }
             } catch (serverError) {
