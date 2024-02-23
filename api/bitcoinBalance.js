@@ -158,23 +158,23 @@ module.exports = async (req, res) => {
 
                     results.forEach(result => {
                         // Ensure balanceBTC is a double for each result
-                        result.balanceBTC = parseFloat(result.balanceBTC);
+                        result.balanceBTC = parseFloat(result.balanceBTC.toFixed(8));
                         addressesDetails.push(result);
-                        totalBalance += result.balanceBTC;
+                        totalBalance += result.balanceBTC; // totalBalance accumulates as a floating-point number
                         totalTransactions += result.totalTransactions;
                         totalConfirmedTransactions += result.confirmedTransactions;
                         totalUnconfirmedTransactions += result.unconfirmedTransactions;
                     });
-
+                    
                     let response = {
                         addressesDetails,
-                        totalBalance: parseFloat(totalBalance), // Ensure totalBalance is a double
+                        totalBalance: parseFloat(totalBalance.toFixed(8)), // Explicitly formatted as a double with 8 decimal places
                         totalTransactions,
                         totalConfirmedTransactions,
                         totalUnconfirmedTransactions,
                         totalAddressesFetched: addressesDetails.length
                     };
-                    res.status(200).send(response);
+                     res.status(200).send(response);
                     return;
                 }
             } catch (serverError) {
