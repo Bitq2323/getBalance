@@ -138,31 +138,44 @@ module.exports = async (req, res) => {
 
                 if (!isMulti) {
                     const details = await getAddressDetails(addressesToCheck[0], client, false);
-                    details.balance = parseFloat(details.balance).toFixed(8); // Ensure balance is a double
-                    res.status(200).send(details);
+                    // Format the response to use "balanceBTC" instead of "balance"
+                    const response = {
+                        address: details.address,
+                        balanceBTC: parseFloat(details.balance).toFixed(8), // Convert and format the balance to BTC with 8 decimal places
+                        confirmedTransactions: details.confirmedTransactions,
+                        unconfirmedTransactions: details.unconfirmedTransactions,
+                        totalTransactions: details.totalTransactions
+                    };
+                    res.status(200).send(response);
                     return;
                 } else {
                     // Handling multiple addresses
                     let addressesDetails = [];
-                    let totalBalance = 0; // Keep as integer for SATS
+                    let totalBalance = 0; // Keep as integer for SATS when isMulti is true
                     let totalTransactions = 0;
                     let totalConfirmedTransactions = 0;
                     let totalUnconfirmedTransactions = 0;
-
-                    let promises = addressesToCheck.map(address => getAddressDetails(address, client, true));
+                
+                    let promises = addressesToCheck.map(address => getAddressDetails(address, client, isMulti));
                     let results = await Promise.all(promises);
-
+                
                     results.forEach(result => {
-                        addressesDetails.push(result);
-                        totalBalance += result.balance; // Accumulate in satoshis
+                        addressesDetails.push({
+                            address: result.address,
+                            balanceSAT: result.balance, // Directly use the balance in SATS for each address
+                            confirmedTransactions: result.confirmedTransactions,
+                            unconfirmedTransactions: result.unconfirmedTransactions,
+                            totalTransactions: result.totalTransactions
+                        });
+                        totalBalance += result.balance; // Accumulate total balance in SATS
                         totalTransactions += result.totalTransactions;
                         totalConfirmedTransactions += result.confirmedTransactions;
                         totalUnconfirmedTransactions += result.unconfirmedTransactions;
                     });
-
+                
                     let response = {
                         addressesDetails,
-                        totalBalance, // Already in SATS, no conversion needed
+                        totalBalanceSAT: totalBalance, // Total balance in SATS
                         totalTransactions,
                         totalConfirmedTransactions,
                         totalUnconfirmedTransactions,
@@ -171,18 +184,18 @@ module.exports = async (req, res) => {
                     res.status(200).send(response);
                     return;
                 }
-            } catch (serverError) {
-                console.warn(`Server ${server} failed: ${serverError.message}`);
-            } finally {
-                if (client) {
-                    client.close();
+                } catch (serverError) {
+                    console.warn(`Server ${server} failed: ${serverError.message}`);
+                } finally {
+                    if (client) {
+                        client.close();
+                    }
                 }
-            }
-        }
-
-        throw new Error("All servers failed to respond.");
-    } catch (error) {
-        console.error('Error:', error);
-        res.status(500).send({ error: 'Internal Server Error', details: error.message });
-    }
-};
+                }
+                
+                throw new Error("All servers failed to respond.");
+                } catch (error) {
+                console.error('Error:', error);
+                res.status(500).send({ error: 'Internal Server Error', details: error.message });
+                }
+            }                
