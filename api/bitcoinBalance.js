@@ -139,9 +139,10 @@ module.exports = async (req, res) => {
                 if (!isMulti) {
                     const details = await getAddressDetails(addressesToCheck[0], client, false);
                     // Format the response to use "balanceBTC" instead of "balance"
+                    const balanceBTC = Number(details.balance.toFixed(8));
                     const response = {
                         address: details.address,
-                        balanceBTC: parseFloat(details.balance).toFixed(8), // Convert and format the balance to BTC with 8 decimal places
+                        balanceBTC: balanceBTC, // Attempt to keep it numeric with 8 decimal places
                         confirmedTransactions: details.confirmedTransactions,
                         unconfirmedTransactions: details.unconfirmedTransactions,
                         totalTransactions: details.totalTransactions
