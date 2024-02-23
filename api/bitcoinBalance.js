@@ -113,25 +113,17 @@ module.exports = async (req, res) => {
         }
 
         let addressesToCheck = inputAddresses.split(',').map(address => address.trim());
-        addressesToCheck = [...new Set(addressesToCheck)].filter(address => address !== '');
+        addressesToCheck = [...new Set(addressesToCheck)].filter(address => isValidAddress(address));
 
-    // List of fallback Electrum servers
-    const fallbackServers = [
-        'bolt.schulzemic.net:50002',
-        'de.poiuty.com:50002',
-        'electrum.kcicom.net:50002',
-        'api.ordimint.com:50002',
-        'electrum.blockstream.info:50002',
-        'bitcoin.aranguren.org:50002',
-        'electrum.jochen-hoenicke.de:50006',
-        'vmd104012.contaboserver.net:50002',
-        'bitcoin.grey.pw:50002',
-        'btc.aftrek.org:50002'
-    ];
+        const fallbackServers = [
+            // List of fallback Electrum servers
+        ];
     
-
         let serversToTry = [specifiedServer, ...fallbackServers];
-        let balanceDetails = null;
+        let addressesDetails = []; // To store details of each address
+        let totalBalance = 0;
+        let totalConfirmedTransactions = 0;
+        let totalUnconfirmedTransactions = 0;
 
         for (const server of serversToTry) {
             try {
@@ -139,15 +131,16 @@ module.exports = async (req, res) => {
                 client = new ElectrumClient(port, hostname, 'tls');
                 await client.connect();
 
-                if (!isMulti && addressesToCheck.length === 1) {
-                    balanceDetails = await getAddressDetails(addressesToCheck[0], client);
-                } else {
-                    balanceDetails = {
-                        totalBalance: (await Promise.all(addressesToCheck.map(address => 
-                            getBalanceForAddress(address, client))
-                        )).reduce((acc, balance) => acc + balance, 0).toFixed(8)
-                    };
-                }
+                let promises = addressesToCheck.map(address => getAddressDetails(address, client));
+                let results = await Promise.all(promises);
+
+                results.forEach(result => {
+                    addressesDetails.push(result);
+                    totalBalance += result.balanceBTC;
+                    totalConfirmedTransactions += result.confirmedTransactions;
+                    totalUnconfirmedTransactions += result.unconfirmedTransactions;
+                });
+
                 break; // Successful execution, break the loop
             } catch (serverError) {
                 console.warn(`Server ${server} failed: ${serverError.message}`);
@@ -158,15 +151,20 @@ module.exports = async (req, res) => {
             }
         }
 
-        if (balanceDetails) {
-            res.status(200).send(JSON.stringify(balanceDetails, null, 3));
+        if (addressesDetails.length > 0) {
+            let response = {
+                addressesDetails,
+                totalBalance: totalBalance.toFixed(8),
+                totalConfirmedTransactions,
+                totalUnconfirmedTransactions,
+                totalAddressesFetched: addressesDetails.length
+            };
+            res.status(200).send(JSON.stringify(response, null, 3));
         } else {
-            throw new Error("All servers failed to respond.");
+            throw new Error("All servers failed to respond or no valid addresses provided.");
         }
     } catch (error) {
         console.error('Error:', error);
         res.status(500).send({ error: 'Internal Server Error', details: error.message });
-    
     }
-
 };
