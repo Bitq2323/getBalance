@@ -158,7 +158,7 @@ module.exports = async (req, res) => {
 
                     results.forEach(result => {
                         // Ensure balanceBTC is a double for each result
-                        result.balanceBTC = result.balanceBTC.toFixed(8);
+                        result.balanceBTC = parseFloat(result.balanceBTC.toFixed(8));
                         addressesDetails.push(result);
                         totalBalance += result.balanceBTC;
                         totalTransactions += result.totalTransactions;
