@@ -168,7 +168,7 @@ module.exports = async (req, res) => {
 
                     let response = {
                         addressesDetails,
-                        totalBalance: totalBalance.toFixed(8), // Keep totalBalance as a String
+                        totalBalance: parseFloat(totalBalance), // Ensure totalBalance is a double
                         totalTransactions,
                         totalConfirmedTransactions,
                         totalUnconfirmedTransactions,
