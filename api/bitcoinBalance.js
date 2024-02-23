@@ -52,12 +52,12 @@ function getScriptHash(address) {
 }
 
 
-async function getAddressDetails(address, electrumClient) {
+async function getAddressDetails(address, electrumClient, returnInSatoshi = false) {
     try {
         const scriptHash = getScriptHash(address);
         const utxos = await electrumClient.blockchainScripthash_listunspent(scriptHash);
         const balance = utxos.reduce((total, utxo) => total + utxo.value, 0);
-        const balanceBTC = balance / 1e8;
+        const balanceBTC = returnInSatoshi ? balance : balance / 1e8; // Convert to BTC only if not returning in satoshis
 
         const history = await electrumClient.blockchainScripthash_getHistory(scriptHash);
         let confirmedTransactions = 0;
@@ -72,7 +72,7 @@ async function getAddressDetails(address, electrumClient) {
 
         return {
             address,
-            balanceBTC,
+            balance: returnInSatoshi ? balance : balanceBTC, // Return balance in the specified unit
             confirmedTransactions,
             unconfirmedTransactions,
             totalTransactions: history.length
@@ -95,8 +95,6 @@ async function getBalanceForAddress(address, electrumClient) {
     }
 }
 
-// Assuming previous functions (isValidAddress, getScriptHash, getAddressDetails) remain unchanged
-
 module.exports = async (req, res) => {
     let client = null;
 
@@ -116,21 +114,20 @@ module.exports = async (req, res) => {
 
         let addressesToCheck = inputAddresses.split(',').map(address => address.trim());
         addressesToCheck = [...new Set(addressesToCheck)].filter(isValidAddress);
-    // List of fallback Electrum servers
-    const fallbackServers = [
-        'bolt.schulzemic.net:50002',
-        'de.poiuty.com:50002',
-        'electrum.kcicom.net:50002',
-        'api.ordimint.com:50002',
-        'electrum.blockstream.info:50002',
-        'bitcoin.aranguren.org:50002',
-        'electrum.jochen-hoenicke.de:50006',
-        'vmd104012.contaboserver.net:50002',
-        'bitcoin.grey.pw:50002',
-        'btc.aftrek.org:50002'
-    ];
 
-    
+        const fallbackServers = [
+            'bolt.schulzemic.net:50002',
+            'de.poiuty.com:50002',
+            'electrum.kcicom.net:50002',
+            'api.ordimint.com:50002',
+            'electrum.blockstream.info:50002',
+            'bitcoin.aranguren.org:50002',
+            'electrum.jochen-hoenicke.de:50006',
+            'vmd104012.contaboserver.net:50002',
+            'bitcoin.grey.pw:50002',
+            'btc.aftrek.org:50002'
+        ];
+
         let serversToTry = [specifiedServer, ...fallbackServers];
 
         for (const server of serversToTry) {
@@ -140,41 +137,38 @@ module.exports = async (req, res) => {
                 await client.connect();
 
                 if (!isMulti) {
-                    const details = await getAddressDetails(addressesToCheck[0], client);
-                    // Ensure balanceBTC is a double
-                    details.balanceBTC = parseFloat(details.balanceBTC);
+                    const details = await getAddressDetails(addressesToCheck[0], client, false);
+                    details.balance = parseFloat(details.balance).toFixed(8); // Ensure balance is a double
                     res.status(200).send(details);
                     return;
                 } else {
                     // Handling multiple addresses
                     let addressesDetails = [];
-                    let totalBalance = 0;
+                    let totalBalance = 0; // Keep as integer for SATS
                     let totalTransactions = 0;
                     let totalConfirmedTransactions = 0;
                     let totalUnconfirmedTransactions = 0;
 
-                    let promises = addressesToCheck.map(address => getAddressDetails(address, client));
+                    let promises = addressesToCheck.map(address => getAddressDetails(address, client, true));
                     let results = await Promise.all(promises);
 
                     results.forEach(result => {
-                        // Ensure balanceBTC is a double for each result
-                        result.balanceBTC = parseFloat(result.balanceBTC.toFixed(8));
                         addressesDetails.push(result);
-                        totalBalance += result.balanceBTC; // totalBalance accumulates as a floating-point number
+                        totalBalance += result.balance; // Accumulate in satoshis
                         totalTransactions += result.totalTransactions;
                         totalConfirmedTransactions += result.confirmedTransactions;
                         totalUnconfirmedTransactions += result.unconfirmedTransactions;
                     });
-                    
+
                     let response = {
                         addressesDetails,
-                        totalBalance: parseFloat(totalBalance.toFixed(8)), // Explicitly formatted as a double with 8 decimal places
+                        totalBalance, // Already in SATS, no conversion needed
                         totalTransactions,
                         totalConfirmedTransactions,
                         totalUnconfirmedTransactions,
                         totalAddressesFetched: addressesDetails.length
                     };
-                     res.status(200).send(response);
+                    res.status(200).send(response);
                     return;
                 }
             } catch (serverError) {
