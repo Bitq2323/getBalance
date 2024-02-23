@@ -95,6 +95,8 @@ async function getBalanceForAddress(address, electrumClient) {
     }
 }
 
+// Your existing imports and function definitions remain unchanged
+
 module.exports = async (req, res) => {
     let client = null;
 
@@ -128,7 +130,7 @@ module.exports = async (req, res) => {
         'bitcoin.grey.pw:50002',
         'btc.aftrek.org:50002'
     ];
-    
+
         let serversToTry = [specifiedServer, ...fallbackServers];
 
         for (const server of serversToTry) {
@@ -138,14 +140,14 @@ module.exports = async (req, res) => {
                 await client.connect();
 
                 if (!isMulti) {
-                    // Handling single address (original functionality)
+                    // Original single address functionality remains unchanged
                     const details = await getAddressDetails(addressesToCheck[0], client);
                     res.status(200).send(JSON.stringify(details, null, 3));
-                    return; // Exit after handling single address
+                    return;
                 } else {
-                    // Handling multiple addresses (new functionality)
-                    let addressesDetails = [];
+                    // Handling multiple addresses
                     let totalBalance = 0;
+                    let totalTransactions = 0;
                     let totalConfirmedTransactions = 0;
                     let totalUnconfirmedTransactions = 0;
 
@@ -153,28 +155,27 @@ module.exports = async (req, res) => {
                     let results = await Promise.all(promises);
 
                     results.forEach(result => {
-                        addressesDetails.push(result);
                         totalBalance += result.balanceBTC;
+                        totalTransactions += result.totalTransactions;
                         totalConfirmedTransactions += result.confirmedTransactions;
                         totalUnconfirmedTransactions += result.unconfirmedTransactions;
                     });
 
                     let response = {
-                        addressesDetails,
-                        totalBalance: totalBalance / 1e8,
-                        totalTransacationsMulti: totalConfirmedTransactions + totalUnconfirmedTransactions,
+                        totalBalance: totalBalance.toFixed(8),
+                        totalTransactions,
                         totalConfirmedTransactions,
                         totalUnconfirmedTransactions,
-                        totalAddressesFetched: addressesDetails.length
+                        totalAddressesFetched: results.length
                     };
                     res.status(200).send(JSON.stringify(response, null, 3));
-                    return; // Exit after handling multiple addresses
+                    return;
                 }
             } catch (serverError) {
                 console.warn(`Server ${server} failed: ${serverError.message}`);
             } finally {
                 if (client) {
-                    client.close(); // Safely close the client
+                    client.close();
                 }
             }
         }
