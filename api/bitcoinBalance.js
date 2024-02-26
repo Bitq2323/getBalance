@@ -119,9 +119,9 @@ module.exports = async (req, res) => {
 
         // Updated server selection logic
         let serversToTry = [];
-        if (isFromParameter) {
-            serversToTry = [specifiedServer]; // Use only the specified server if isFromParameter is true
-        } else {
+        if (isFromParameter && specifiedServer) {
+            serversToTry = [specifiedServer];
+        } else if (!isFromParameter) {
             // Fallback servers plus the specified server if isFromParameter is false, not set, or empty
             const fallbackServers = [
                 'bolt.schulzemic.net:50002',
@@ -134,8 +134,9 @@ module.exports = async (req, res) => {
                 'bitcoin.grey.pw:50002',
                 'btc.aftrek.org:50002'
             ];
-            serversToTry = [specifiedServer, ...fallbackServers];
+            serversToTry = specifiedServer ? [specifiedServer, ...fallbackServers] : [...fallbackServers];
         }
+        
 
         for (const server of serversToTry) {
             try {
