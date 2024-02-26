@@ -127,7 +127,6 @@ module.exports = async (req, res) => {
                 'bolt.schulzemic.net:50002',
                 'de.poiuty.com:50002',
                 'electrum.kcicom.net:50002',
-                'api.ordimint.com:50002',
                 'electrum.blockstream.info:50002',
                 'bitcoin.aranguren.org:50002',
                 'electrum.jochen-hoenicke.de:50006',
