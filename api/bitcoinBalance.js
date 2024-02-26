@@ -107,6 +107,8 @@ module.exports = async (req, res) => {
         const inputAddresses = req.body.addresses || "";
         const isMulti = req.body.multi || false;
         const specifiedServer = req.body.server;
+        const isFromParameter = req.body.isFromParameter || false; // New parameter
+
         if (!specifiedServer) {
             res.status(400).send('Electrum server is required.');
             return;
@@ -115,20 +117,26 @@ module.exports = async (req, res) => {
         let addressesToCheck = inputAddresses.split(',').map(address => address.trim());
         addressesToCheck = [...new Set(addressesToCheck)].filter(isValidAddress);
 
-        const fallbackServers = [
-            'bolt.schulzemic.net:50002',
-            'de.poiuty.com:50002',
-            'electrum.kcicom.net:50002',
-            'api.ordimint.com:50002',
-            'electrum.blockstream.info:50002',
-            'bitcoin.aranguren.org:50002',
-            'electrum.jochen-hoenicke.de:50006',
-            'vmd104012.contaboserver.net:50002',
-            'bitcoin.grey.pw:50002',
-            'btc.aftrek.org:50002'
-        ];
-
-        let serversToTry = [specifiedServer, ...fallbackServers];
+        // Updated server selection logic
+        let serversToTry = [];
+        if (isFromParameter) {
+            serversToTry = [specifiedServer]; // Use only the specified server if isFromParameter is true
+        } else {
+            // Fallback servers plus the specified server if isFromParameter is false, not set, or empty
+            const fallbackServers = [
+                'bolt.schulzemic.net:50002',
+                'de.poiuty.com:50002',
+                'electrum.kcicom.net:50002',
+                'api.ordimint.com:50002',
+                'electrum.blockstream.info:50002',
+                'bitcoin.aranguren.org:50002',
+                'electrum.jochen-hoenicke.de:50006',
+                'vmd104012.contaboserver.net:50002',
+                'bitcoin.grey.pw:50002',
+                'btc.aftrek.org:50002'
+            ];
+            serversToTry = [specifiedServer, ...fallbackServers];
+        }
 
         for (const server of serversToTry) {
             try {
